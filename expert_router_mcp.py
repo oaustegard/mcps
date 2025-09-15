@@ -1,76 +1,147 @@
 from fastmcp import FastMCP
 from pathlib import Path
-import json
-import yaml
 import hashlib
 from datetime import datetime
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
+import re
 
 mcp = FastMCP("ICL Experts")
 
-def calculate_experts_hash(experts: Dict[str, Any]) -> str:
-    """Calculate hash of all expert data for versioning."""
-    experts_str = json.dumps(experts, sort_keys=True)
-    return hashlib.md5(experts_str.encode()).hexdigest()[:8]
+def extract_role(content: str) -> str:
+    """
+    Extract role definition from expert file using flexible patterns.
+    
+    Prioritizes rich role content over simple description labels.
+    Supports any format with minimal syntax requirements.
+    """
+    
+    # Try patterns in order of richness/preference
+    patterns = [
+        # Role tags (preferred - contains methodology and approach)
+        (r'<role>\s*(.+?)\s*</role>', "role definition"),
+        
+        # System prompt as good fallback (often contains role info)
+        (r'<system_prompt>\s*(.+?)\s*</system_prompt>', "system prompt"),
+        (r'"system_prompt"\s*:\s*"([^"]+)"', "system prompt"),
+        
+        # Legacy description fields for backward compatibility
+        (r'"description"\s*:\s*"([^"]+)"', "JSON description"),
+        (r"'description'\s*:\s*'([^']+)'", "JSON description"),
+        (r'^description\s*:\s*(.+?)(?=\n\w|\n#|\Z)', "YAML description"),
+        (r'<description[^>]*>\s*(.+?)\s*</description>', "XML description"),
+        
+        # Markdown-style headers
+        (r'^#\s*Role\s*\n(.+?)(?=\n#|\n\n|\Z)', "Markdown role"),
+        (r'^##\s*Role\s*\n(.+?)(?=\n#|\n\n|\Z)', "Markdown role"),
+        (r'^#\s*Description\s*\n(.+?)(?=\n#|\n\n|\Z)', "Markdown description"),
+        
+        # Comment-style
+        (r'#\s*ROLE\s*:\s*(.+)$', "comment role"),
+        (r'//\s*ROLE\s*:\s*(.+)$', "comment role"),
+        (r'#\s*DESCRIPTION\s*:\s*(.+)$', "comment description"),
+        (r'//\s*DESCRIPTION\s*:\s*(.+)$', "comment description"),
+        
+        # Simple line format
+        (r'^Role\s*:\s*(.+)$', "line role"),
+        (r'^Description\s*:\s*(.+)$', "line description"),
+    ]
+    
+    for pattern, source_type in patterns:
+        match = re.search(pattern, content, re.MULTILINE | re.IGNORECASE | re.DOTALL)
+        if match:
+            role = match.group(1).strip()
+            # Clean up multi-line content for listing purposes
+            if '\n' in role:
+                # Take first substantial sentence or paragraph
+                lines = [line.strip() for line in role.split('\n') if line.strip()]
+                if lines:
+                    first_line = lines[0]
+                    # If first line is very short, try to include more context
+                    if len(first_line) < 50 and len(lines) > 1:
+                        role = f"{first_line} {lines[1]}"
+                    else:
+                        role = first_line
+            
+            # Truncate if too long for listing
+            if len(role) > 200:
+                role = role[:197] + "..."
+                
+            return role
+    
+    # Ultimate fallback
+    return "Expert content available (no role definition found)"
 
-def load_experts() -> Dict[str, Any]:
-    """Load experts from files in ./experts/ directory."""
+def load_experts() -> Dict[str, Dict[str, str]]:
+    """
+    Load all expert files as plain text.
+    
+    Supports ANY text-based format: .txt, .md, .json, .xml, .yaml, .yml, etc.
+    Requires only that a role can be extracted for listing purposes.
+    """
     experts = {}
     experts_dir = Path("experts")
     
+    # Create directory if it doesn't exist, but don't populate it
     if not experts_dir.exists():
         experts_dir.mkdir()
-        # Create example expert
-        example_expert = {
-            "name": "Python Development",
-            "description": "Python development, debugging, architecture, testing",
-            "system_prompt": "You are a Python development expert focusing on clean, maintainable code.",
-            "core_patterns": [
-                "Use dataclasses for structured data",
-                "Prefer pathlib over os.path",
-                "Write tests first for complex logic",
-                "Handle exceptions specifically"
-            ],
-            "process_steps": [
-                "Understand the data flow and error points",
-                "Choose appropriate architectural patterns", 
-                "Implement with proper error handling",
-                "Validate through systematic testing"
-            ],
-            "keywords": ["python", "code", "debug", "test", "class", "function"]
-        }
-        
-        with open(experts_dir / "python_dev.json", "w") as f:
-            json.dump(example_expert, f, indent=2)
+        print("Created ./experts/ directory. Add your expert files here!")
     
-    # Load all expert files
-    for file_path in experts_dir.glob("*.json"):
-        expert_id = file_path.stem
-        try:
-            with open(file_path) as f:
-                experts[expert_id] = json.load(f)
-        except Exception as e:
-            print(f"Error loading expert {expert_id}: {e}")
+    # Load ALL text files (any extension)
+    text_extensions = {'.txt', '.md', '.json', '.xml', '.yaml', '.yml', '.py', '.js', '.html'}
     
-    for file_path in experts_dir.glob("*.yaml"):
-        expert_id = file_path.stem
-        try:
-            with open(file_path) as f:
-                experts[expert_id] = yaml.safe_load(f)
-        except Exception as e:
-            print(f"Error loading expert {expert_id}: {e}")
+    for file_path in experts_dir.iterdir():
+        if file_path.is_file() and (file_path.suffix.lower() in text_extensions or not file_path.suffix):
+            try:
+                # Read entire file as text
+                content = file_path.read_text(encoding='utf-8')
+                
+                # Extract role for listing
+                role = extract_role(content)
+                
+                expert_id = file_path.stem
+                experts[expert_id] = {
+                    'content': content,
+                    'role': role,
+                    'filename': file_path.name
+                }
+                
+            except Exception as e:
+                print(f"Error loading expert {file_path}: {e}")
     
     return experts
 
+def calculate_experts_hash(experts: Dict[str, Dict[str, str]]) -> str:
+    """Calculate hash of all expert content for versioning."""
+    # Hash based on content only, not metadata
+    content_str = "".join(expert['content'] for expert in experts.values())
+    return hashlib.md5(content_str.encode()).hexdigest()[:8]
+
+def load_project_template() -> str:
+    """
+    Load project instruction template from file.
+    
+    Template should contain {expert_list}, {version}, {timestamp} placeholders.
+    """
+    template_path = Path("project_instruction_template.md")
+    
+    if not template_path.exists():
+        raise FileNotFoundError(
+            f"Project template file not found: {template_path}\n"
+            "Please create project_instruction_template.md with placeholders: "
+            "{expert_list}, {version}, {timestamp}"
+        )
+    
+    return template_path.read_text(encoding='utf-8')
+
 @mcp.tool
 def get_project_instruction(current_version: Optional[str] = None) -> str:
-    """
-    Get the complete Claude project instruction with expert list and version.
-    Compares against current_version to detect if update is needed.
-    """
+    """Generate project instruction from template file with current expert list."""
     experts = load_experts()
     version = calculate_experts_hash(experts)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
+    
+    # Load template from file
+    template = load_project_template()
     
     # Check if update needed
     update_notice = ""
@@ -86,102 +157,77 @@ Please replace your Claude project instruction with the content below.
     elif current_version == version:
         update_notice = "✅ Your project instruction is up to date.\n\n---\n"
     
-    # Generate expert list
+    # Generate expert list with role-based descriptions
     expert_list = ""
-    for expert_id, expert in experts.items():
-        expert_list += f"- **{expert_id}**: {expert.get('description', 'No description')}\n"
+    for expert_id, expert_data in experts.items():
+        role = expert_data['role']
+        expert_list += f"- **{expert_id}**: {role}\n"
     
-    # Complete project instruction
-    instruction = f"""{update_notice}
-# Expert-Enhanced Assistant
-
-**Version:** {version} (Generated: {timestamp})
-
-You are an AI assistant with access to specialized expert knowledge through the ICL Experts MCP server.
-
-## Available Experts
-
-{expert_list}
-
-## Process for Complex Queries
-
-When handling technical or specialized questions:
-
-1. **Identify the domain** - Determine which expert(s) would be most relevant
-2. **Consult expert knowledge** using `consult_expert(expert_id)` for single domain questions
-3. **Use multiple experts** with `consult_multiple_experts([expert_ids])` for cross-domain questions  
-4. **Apply expert frameworks** - Use the returned system prompts, patterns, and processes
-5. **Synthesize response** - Combine expert knowledge with your reasoning
-
-## Decision Guidelines
-
-- **Single expert**: Questions clearly in one domain (e.g., "How to optimize Python code?" → `python_dev`)
-- **Multiple experts**: Complex questions spanning domains (e.g., "Build a scalable data pipeline" → `["python_dev", "data_analysis", "system_design"]`)
-- **No expert needed**: Simple questions you can answer directly
-
-## Usage Examples
-
-```python
-# Single expert consultation
-expert_knowledge = consult_expert("python_dev")
-# Apply the returned patterns and processes to your response
-
-# Multiple expert consultation  
-multi_expert_knowledge = consult_multiple_experts(["data_analysis", "system_design"])
-# Synthesize insights from multiple expert perspectives
-```
-
-Always explain which expert knowledge you're applying when you consult experts, so users understand the specialized frameworks being used.
-
----
-
-**Instructions for updating:**
-1. Copy this entire instruction 
-2. Replace your current Claude project system prompt
-3. Keep this version number: `{version}` for future update checks"""
+    # Fill template
+    instruction = template.format(
+        version=version,
+        timestamp=timestamp,
+        expert_list=expert_list
+    )
     
-    return instruction
+    return update_notice + instruction
 
 @mcp.tool
 def consult_expert(expert_id: str) -> str:
-    """Get complete knowledge from a specific expert."""
+    """
+    Get complete expert content as text.
+    
+    Returns the entire expert file content without any parsing or filtering.
+    Claude can process any format (JSON, XML, Markdown, plain text, etc.) naturally.
+    """
     experts = load_experts()
     
     if expert_id not in experts:
         available = list(experts.keys())
-        return json.dumps({
-            "error": f"Expert '{expert_id}' not found",
-            "available": available
-        })
+        return f"Error: Expert '{expert_id}' not found.\nAvailable experts: {', '.join(available)}"
     
     expert = experts[expert_id]
-    return json.dumps({
-        "expert_id": expert_id,
-        "name": expert.get("name", expert_id),
-        "system_prompt": expert.get("system_prompt", ""),
-        "core_patterns": expert.get("core_patterns", []),
-        "process_steps": expert.get("process_steps", [])
-    }, indent=2)
+    
+    # Return complete content with minimal header
+    return f"""=== EXPERT: {expert_id} ===
+Source: {expert['filename']}
+
+{expert['content']}"""
 
 @mcp.tool
 def consult_multiple_experts(expert_ids: list[str]) -> str:
-    """Get knowledge from multiple experts."""
+    """Get complete content from multiple experts."""
     experts = load_experts()
-    results = {}
+    results = []
     
     for expert_id in expert_ids:
         if expert_id in experts:
             expert = experts[expert_id]
-            results[expert_id] = {
-                "name": expert.get("name", expert_id),
-                "system_prompt": expert.get("system_prompt", ""),
-                "core_patterns": expert.get("core_patterns", []),
-                "process_steps": expert.get("process_steps", [])
-            }
+            results.append(f"""=== EXPERT: {expert_id} ===
+Source: {expert['filename']}
+
+{expert['content']}
+
+""")
         else:
-            results[expert_id] = {"error": f"Expert '{expert_id}' not found"}
+            results.append(f"=== ERROR ===\nExpert '{expert_id}' not found\n\n")
     
-    return json.dumps(results, indent=2)
+    return "".join(results)
+
+@mcp.tool
+def list_experts() -> str:
+    """List all available experts with their roles."""
+    experts = load_experts()
+    
+    if not experts:
+        return "No experts found in ./experts/ directory"
+    
+    result = "Available experts:\n\n"
+    for expert_id, expert in experts.items():
+        result += f"**{expert_id}** ({expert['filename']})\n"
+        result += f"  {expert['role']}\n\n"
+    
+    return result
 
 @mcp.tool
 def get_current_version() -> str:
@@ -190,32 +236,13 @@ def get_current_version() -> str:
     version = calculate_experts_hash(experts)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
     
-    return json.dumps({
-        "version": version,
-        "timestamp": timestamp,
-        "expert_count": len(experts),
-        "experts": list(experts.keys())
-    }, indent=2)
+    expert_files = [f"{expert_id} ({expert['filename']})" for expert_id, expert in experts.items()]
+    
+    return f"""Current Expert System Status:
 
-@mcp.tool
-def list_expert_files() -> str:
-    """List all expert files found in ./experts/ directory."""
-    experts_dir = Path("experts")
-    
-    if not experts_dir.exists():
-        return "No experts directory found. Will be created on first expert load."
-    
-    files = []
-    for pattern in ["*.json", "*.yaml"]:
-        files.extend(experts_dir.glob(pattern))
-    
-    if not files:
-        return "No expert files found in ./experts/ directory"
-    
-    file_info = "Expert files found:\n"
-    for file_path in sorted(files):
-        stat = file_path.stat()
-        modified = datetime.fromtimestamp(stat.st_mtime).strftime("%Y-%m-%d %H:%M")
-        file_info += f"- {file_path.name} (modified: {modified})\n"
-    
-    return file_info
+Version: {version}
+Generated: {timestamp}
+Expert Count: {len(experts)}
+
+Expert Files:
+{chr(10).join(f"- {ef}" for ef in expert_files)}"""
