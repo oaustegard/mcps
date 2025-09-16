@@ -11,7 +11,16 @@ mcp = FastMCP(
 
 IMPORTANT: If a user asks about ICL Experts usage, setup, or configuration, 
 ALWAYS call get_project_instruction() first (without version parameter) to 
-provide current setup instructions, then explain usage.
+provide current setup instructions, then explain usage (deep insights can be provided by the experts_README expert).
+
+CRITICAL ARTIFACT HANDLING: When get_project_instruction() returns content with 
+update notices (🔄 UPDATE REQUIRED or 🚀 INITIAL SETUP), you MUST:
+1. Extract the complete content after the "---" separator
+2. Create a markdown artifact titled "Claude Project Instructions"
+3. Tell the user to copy this artifact content to their Claude project settings
+4. Note the version hash for future reference
+
+This ensures new users get immediately actionable setup instructions.
 
 For expert consultations, use consult_expert(expert_id) or consult_multiple_experts([ids]).
 For expert discovery, use list_experts()."""
