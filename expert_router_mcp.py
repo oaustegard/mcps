@@ -63,13 +63,13 @@ def extract_role(content: str) -> str:
                         role = first_line
             
             # Truncate if too long for listing
-            if len(role) > 200:
-                role = role[:197] + "..."
+            if len(role) > 250:
+                role = role[:247] + "..."
                 
             return role
     
     # Ultimate fallback
-    return "Expert content available (no role definition found)"
+    return "This expert doesn't have a designated role - alert user and attempt to infer from expert id"
 
 def load_experts() -> Dict[str, Dict[str, str]]:
     """
