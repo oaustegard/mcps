@@ -5,7 +5,10 @@ from datetime import datetime
 from typing import Dict, Optional
 import re
 
-mcp = FastMCP("ICL Experts")
+mcp = FastMCP(
+    name="ICL Experts",
+    description="In-Context Learning (ICL) Experts. For usage questions, invoke icl_experts_expert. For a list of experts, invoke list_experts."
+)
 
 def extract_role(content: str) -> str:
     """

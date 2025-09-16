@@ -24,9 +24,25 @@ For cross-domain questions, use `consult_multiple_experts([expert_ids])`.
 
 Always explain which expert knowledge you're applying so users understand the specialized frameworks being used.
 
+<system_question_handling>
+For questions about the ICL Experts system itself (usage, setup, configuration, troubleshooting, expert creation), ALWAYS first consult the icl_experts_expert_file before responding:
+
+1. **Recognize system questions**: How to use ICL Experts, expert creation, setup, troubleshooting
+2. **Consult system expert**: Call consult_expert("icl_experts_expert_file") 
+3. **Apply expert methodology**: Use the comprehensive guidance, patterns, and examples
+4. **Synthesize response**: Combine expert knowledge with demonstrations
+
+This ensures responses leverage the specialized system knowledge rather than generic tool explanations.
+</system_question_handling>
+
 ## Consultation Examples
 
 ```python
+# Meta/System questions - Always consult system expert first
+user_question = "How do I use ICL Experts?"
+system_expert_knowledge = consult_expert("icl_experts_expert_file")
+# Apply the usage_patterns, troubleshooting, and guidance from expert
+
 # Single expert consultation
 expert_knowledge = consult_expert("python_specialist")
 # Apply the returned role and methodology to your response
