@@ -7,7 +7,14 @@ import re
 
 mcp = FastMCP(
     name="ICL Experts",
-    instructions="In-Context Learning (ICL) Experts. For usage questions, consult icl_experts_expert. For a list of experts, invoke list_experts."
+    instructions="""In-Context Learning (ICL) Experts providing specialized domain knowledge.
+
+IMPORTANT: If a user asks about ICL Experts usage, setup, or configuration, 
+ALWAYS call get_project_instruction() first (without version parameter) to 
+provide current setup instructions, then explain usage.
+
+For expert consultations, use consult_expert(expert_id) or consult_multiple_experts([ids]).
+For expert discovery, use list_experts()."""
 )
 
 def extract_role(content: str) -> str:
@@ -138,7 +145,15 @@ def load_project_template() -> str:
 
 @mcp.tool
 def get_project_instruction(current_version: Optional[str] = None) -> str:
-    """Generate project instruction from template file with current expert list."""
+    """Generate project instruction from template file with current expert list.
+    
+    Usage patterns:
+    - NEW USERS: Call without current_version to get setup instructions
+    - EXISTING USERS: Call with current_version (from your project instructions) to check for updates
+    
+    If no current_version provided, assumes new user setup is needed.
+    If current_version provided, compares against current version and shows update status.
+    """
     experts = load_experts()
     version = calculate_experts_hash(experts)
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M UTC")
@@ -146,27 +161,33 @@ def get_project_instruction(current_version: Optional[str] = None) -> str:
     # Load template from file
     template = load_project_template()
     
-    # Check if update needed
-    update_notice = ""
-    if current_version and current_version != version:
-        update_notice = f"""
-🔄 **UPDATE REQUIRED**
+    # Determine user status and appropriate messaging
+    if current_version is None:
+        # New user setup
+        update_notice = """🚀 **INITIAL SETUP**
+Copy the instructions below to your Claude project settings to enable expert-guided workflows.
+
+---
+"""
+    elif current_version != version:
+        # Update needed
+        update_notice = f"""🔄 **UPDATE REQUIRED**
 Your project instruction version ({current_version}) is outdated.
 Current version: {version}
 Please replace your Claude project instruction with the content below.
 
 ---
 """
-    elif current_version == version:
+    else:
+        # Up to date
         update_notice = "✅ Your project instruction is up to date.\n\n---\n"
     
-    # Generate expert list with role-based descriptions
+    # Generate expert list and fill template
     expert_list = ""
     for expert_id, expert_data in experts.items():
         role = expert_data['role']
         expert_list += f"- **{expert_id}**: {role}\n"
     
-    # Fill template
     instruction = template.format(
         version=version,
         timestamp=timestamp,
