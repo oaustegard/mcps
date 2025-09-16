@@ -7,7 +7,7 @@ import re
 
 mcp = FastMCP(
     name="ICL Experts",
-    description="In-Context Learning (ICL) Experts. For usage questions, invoke icl_experts_expert. For a list of experts, invoke list_experts."
+    instructions="In-Context Learning (ICL) Experts. For usage questions, consult icl_experts_expert. For a list of experts, invoke list_experts."
 )
 
 def extract_role(content: str) -> str:
