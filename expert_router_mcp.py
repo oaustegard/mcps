@@ -10,17 +10,9 @@ mcp = FastMCP(
     instructions="""In-Context Learning (ICL) Experts providing specialized domain knowledge.
 
 IMPORTANT: If a user asks about ICL Experts usage, setup, or configuration, 
-ALWAYS call get_project_instruction() first (without version parameter) to 
-provide current setup instructions, then explain usage (deep insights can be provided by the experts_README expert).
-
-CRITICAL ARTIFACT HANDLING: When get_project_instruction() returns content with 
-update notices (🔄 UPDATE REQUIRED or 🚀 INITIAL SETUP), you MUST:
-1. Extract the complete content after the "---" separator
-2. Create a markdown artifact titled "Claude Project Instructions"
-3. Tell the user to copy this artifact content to their Claude project settings
-4. Note the version hash for future reference
-
-This ensures new users get immediately actionable setup instructions.
+ALWAYS call get_project_instruction() first (without version parameter) to provide current setup instructions, 
+then explain usage (deep insights can be provided by the experts_README expert). This ensures new users get 
+immediately actionable setup instructions.
 
 For expert consultations, use consult_expert(expert_id) or consult_multiple_experts([ids]).
 For expert discovery, use list_experts()."""
@@ -152,7 +144,21 @@ def load_project_template() -> str:
     
     return template_path.read_text(encoding='utf-8')
 
-@mcp.tool
+@mcp.tool(
+    description="""Generate project instruction from template file with current expert list.
+
+Usage patterns:
+- NEW USERS: Call without current_version to get setup instructions
+- EXISTING USERS: Call with current_version (from your project instructions) to check for updates
+
+If no current_version provided, assumes new user setup is needed.
+If current_version provided, compares against current version and shows update status.
+
+CRITICAL: When this tool returns content with update notices (🔄 UPDATE REQUIRED or 🚀 INITIAL SETUP), 
+you MUST create a markdown artifact containing the complete content after the "---" separator. 
+Title it "Claude Project Instructions" and tell the user to copy this artifact content to their 
+Claude project settings. This ensures new users get immediately actionable setup instructions."""
+)
 def get_project_instruction(current_version: Optional[str] = None) -> str:
     """Generate project instruction from template file with current expert list.
     
