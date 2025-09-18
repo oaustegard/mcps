@@ -135,58 +135,14 @@ def _extract_role(content: str) -> str:
     # Ultimate fallback
     return "This expert doesn't have a designated role - alert user and attempt to infer from expert id"
 
-def _generate_expert_system_context() -> str:
-    """
-    Generate dynamic system context for automatic expert routing.
-    
-    This replaces static project instructions with dynamic MCP context.
-    """
-    experts = get_cached_experts()
-    
-    if not experts:
-        return """
-You have access to specialized experts via ICL Experts MCP, but no experts are currently loaded.
-Check that expert files exist in the ./experts/ directory.
-"""
-    
-    # Generate expert descriptions for routing
-    expert_descriptions = []
-    for expert_id, expert_data in experts.items():
-        role = expert_data['role']
-        expert_descriptions.append(f"- **{expert_id}**: {role}")
-    
-    expert_list = "\n".join(expert_descriptions)
-    
-    return f"""
-🎯 **ICL EXPERTS SYSTEM CONTEXT**
-
-You have access to {len(experts)} specialized experts for domain-specific knowledge. Your goal is to
-automatically consult them to answer user questions without the user needing to know about this system.
-
-**AVAILABLE EXPERTS**
-{expert_list}
-
-**USAGE PATTERNS**
-1.  **Automatic Expert Consultation**: When a user asks a question in a specific domain (e.g., "How do I write a Java class?"), silently consult the relevant expert (`consult_expert("java_specialist")`) and use the retrieved knowledge to formulate your answer. The user should feel like they are talking to a single, highly knowledgeable assistant.
-
-2.  **Multi-Expert Synthesis**: For complex questions that span multiple domains (e.g., "How do I analyze data with a Python script?"), consult multiple experts (`consult_multiple_experts(["python_specialist", "data_analysis"])`) and synthesize their knowledge into a single, comprehensive answer.
-
-3.  **Seamless Integration**: Do not mention the expert system unless there is an error. The process should be invisible to the user. Simply apply the expert's knowledge to provide a better answer.
-
-**ROUTING GUIDANCE**
--   **Analyze User Intent**: Determine the primary domain of the user's question.
--   **Select the Best Expert**: Choose the expert whose role best matches the user's intent.
--   **Consult and Answer**: Call the appropriate tool, wait for the expert knowledge, and then formulate your response.
-
-Your primary instruction is to use these experts to provide the most accurate and specialized answers possible, creating a seamless and powerful user experience.
-"""
+from intelligent_context import initialize_intelligent_system
 
 # ============================================================================
 # FASTMCP SERVER CONFIGURATION
 # ============================================================================
 
 # Generate dynamic system context
-expert_system_context = _generate_expert_system_context()
+expert_system_context = initialize_intelligent_system()
 
 mcp = FastMCP(
     name="ICL Experts",
