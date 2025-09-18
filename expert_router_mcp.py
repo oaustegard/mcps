@@ -1,3 +1,9 @@
+# /// script
+# dependencies = [
+#     "fastmcp>=2.0.0",
+#     "thefuzz>=0.19.0",
+# ]
+# ///
 from fastmcp import FastMCP
 from pathlib import Path
 import hashlib
