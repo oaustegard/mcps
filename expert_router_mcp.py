@@ -3,6 +3,7 @@ from pathlib import Path
 import hashlib
 from typing import Dict, Optional
 import re
+from thefuzz import fuzz, process
 
 # ============================================================================
 # MODULE-LEVEL CONSTANTS AND CACHING
@@ -230,29 +231,50 @@ def wakeup_server() -> str:
 If you continue experiencing issues after this wakeup call, the server may be experiencing temporary problems."""
 
 @mcp.tool(
-    description="""Get complete expert content as text.
+    description="""Consult a specialized expert for domain-specific knowledge, with smart routing.
+
+    - If you provide an exact expert_id, it will be returned.
+    - If the expert_id is not found, this tool will automatically find the best match.
+    - Example: consult_expert("python") will route to "python_specialist".
     
-    ⚠️ **Retry Notice**: If this tool fails initially, wait 2-3 seconds and retry once, 
-    or use wakeup_server() first.
-    
-    Returns the entire expert file content without any parsing or filtering.
-    Claude can process any format (JSON, XML, Markdown, plain text, etc.) naturally."""
+    ⚠️ **Retry Notice**: If this tool fails, wait 2-3 seconds and retry, or use wakeup_server()."""
 )
 def consult_expert(expert_id: str) -> str:
-    """Return complete expert file content from cache."""
+    """
+    Return complete expert file content from cache with fuzzy matching.
+    """
     experts = get_cached_experts()
     
-    if expert_id not in experts:
-        available = list(experts.keys())
-        return f"Error: Expert '{expert_id}' not found.\nAvailable experts: {', '.join(available)}"
-    
-    expert = experts[expert_id]
-    
-    # Return complete content with minimal header
-    return f"""=== EXPERT: {expert_id} ===
+    # 1. Exact match (fast path)
+    if expert_id in experts:
+        expert = experts[expert_id]
+        return f"""=== EXPERT: {expert_id} ===
 Source: {expert['filename']}
 
 {expert['content']}"""
+
+    # 2. Fuzzy matching for intelligent routing
+    available_experts = list(experts.keys())
+    if not available_experts:
+        return "Error: No experts available to consult."
+
+    # Find the best match
+    best_match, score = process.extractOne(expert_id, available_experts, scorer=fuzz.WRatio)
+    
+    # 3. Auto-consult if high confidence, otherwise suggest
+    if best_match and score > 80:
+        # Automatically route to the best match
+        expert = experts[best_match]
+        return f"""=== EXPERT: {best_match} (Auto-routed from '{expert_id}') ===
+Source: {expert['filename']}
+
+{expert['content']}"""
+    elif best_match and score > 50:
+        # Suggest a close match
+        return f"Error: Expert '{expert_id}' not found. Did you mean '{best_match}'?"
+    else:
+        # Generic not found error with list
+        return f"Error: Expert '{expert_id}' not found.\nAvailable experts: {', '.join(available_experts)}"
 
 @mcp.tool(
     description="""Get complete content from multiple experts.
