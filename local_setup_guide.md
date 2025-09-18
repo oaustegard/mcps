@@ -6,13 +6,13 @@ This guide shows how to run ICL Experts locally using FastMCP.
 
 The simplest approach uses the FastMCP CLI directly:
 
-### 1. Install FastMCP
+### 1. Install Dependencies
 ```bash
 # Using uv (recommended)
-uv pip install fastmcp
+uv pip install fastmcp "thefuzz[speedup]"
 
-# Or using pip  
-pip install fastmcp
+# Or using pip
+pip install fastmcp "thefuzz[speedup]"
 ```
 
 ### 2. Get ICL Experts
@@ -84,8 +84,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "icl-experts"
-version = "1.0.0"
-dependencies = ["fastmcp>=2.11.0"]
+version = "1.1.0"
+dependencies = [
+    "fastmcp>=2.11.0",
+    "thefuzz[speedup]>=0.22.1"
+]
 
 [project.scripts]
 icl-experts = "expert_router_mcp:main"
